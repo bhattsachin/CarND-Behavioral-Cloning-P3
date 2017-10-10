@@ -15,6 +15,8 @@ from io import BytesIO
 from keras.models import load_model
 import h5py
 from keras import __version__ as keras_version
+from keras.models import model_from_json
+import cv2
 
 sio = socketio.Server()
 app = Flask(__name__)
@@ -61,6 +63,7 @@ def telemetry(sid, data):
         imgString = data["image"]
         image = Image.open(BytesIO(base64.b64decode(imgString)))
         image_array = np.asarray(image)
+        image_array = cv2.resize(image_array[60:140,:],(64,64))
         steering_angle = float(model.predict(image_array[None, :, :, :], batch_size=1))
 
         throttle = controller.update(float(speed))
@@ -111,15 +114,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     # check that model Keras version is same as local Keras version
-    f = h5py.File(args.model, mode='r')
-    model_version = f.attrs.get('keras_version')
-    keras_version = str(keras_version).encode('utf8')
-
-    if model_version != keras_version:
-        print('You are using Keras version ', keras_version,
-              ', but the model was built using ', model_version)
-
-    model = load_model(args.model)
+    
 
     if args.image_folder != '':
         print("Creating image folder at {}".format(args.image_folder))
@@ -131,6 +126,22 @@ if __name__ == '__main__':
         print("RECORDING THIS RUN ...")
     else:
         print("NOT RECORDING THIS RUN ...")
+        #f = h5py.File(args.model, mode='r')
+        #model_version = f.attrs.get('keras_version')
+        #keras_version = str(keras_version).encode('utf8')
+
+        #if model_version != keras_version:
+        #    print('You are using Keras version ', keras_version,
+        #        ', but the model was built using ', model_version)
+
+        #model = load_model(args.model)
+        with open(args.model, 'r') as jfile:
+            model = model_from_json(jfile.read())
+
+        model.compile("adam", "mse")
+        weights_file = args.model.replace('json', 'h5')
+        model.load_weights(weights_file)
+
 
     # wrap Flask application with engineio's middleware
     app = socketio.Middleware(sio, app)
